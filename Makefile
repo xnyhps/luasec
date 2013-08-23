@@ -10,8 +10,8 @@ DEFS		 = -DWITH_LUASOCKET
 
 # Edit the lines below to inform new path, if necessary.
 # Path below points to internal LuaSocket's help files.
-INC_PATH	?= -I/usr/include
-LIB_PATH	?= -L/usr/lib
+INC_PATH	?= -I/opt/local/include -I/usr/include
+LIB_PATH	?= -L/opt/local/lib -L/usr/lib
 INCDIR		 = -I. $(INC_PATH)
 LIBDIR		 = -L./luasocket $(LIB_PATH)
 

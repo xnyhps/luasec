@@ -320,6 +320,21 @@ static int meth_digest(lua_State* L)
 }
 
 /**
+ * Retrieve the number of bits of the key
+ */
+static int meth_bits(lua_State* L)
+{
+  int bits = -1;
+  X509* cert = lsec_checkx509(L, 1);
+  EVP_PKEY *pktmp;
+  pktmp = X509_get_pubkey(cert);
+  bits = EVP_PKEY_bits(pktmp);
+  EVP_PKEY_free(pktmp);
+  lua_pushinteger(L, bits);
+  return 1;
+}
+
+/**
  * Check if the certificate is valid in a given time.
  */
 static int meth_valid_at(lua_State* L)
@@ -417,6 +432,7 @@ static luaL_Reg methods[] = {
   {"serial",     meth_serial},
   {"subject",    meth_subject},
   {"validat",    meth_valid_at},
+  {"bits",       meth_bits},
   {NULL,         NULL}
 };
 

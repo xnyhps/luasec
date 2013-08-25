@@ -413,6 +413,44 @@ static int meth_crl(lua_State *L)
   }
 }
 
+static int meth_ocsp(lua_State *L)
+{
+  X509* peer = lsec_checkx509(L, 1);
+  AUTHORITY_INFO_ACCESS *info;
+  int i, count = 0;
+
+  info = X509_get_ext_d2i(peer, NID_info_access, NULL, NULL);
+
+  if (info == NULL) {
+    lua_pushnil(L);
+    return 1;
+  }
+
+  for (i = 0; i < sk_ACCESS_DESCRIPTION_num(info); i++) {
+    ACCESS_DESCRIPTION *ad = sk_ACCESS_DESCRIPTION_value(info, i);
+
+    if (OBJ_obj2nid(ad->method) == NID_ad_OCSP) {
+      if (ad->location->type == GEN_URI) {
+        push_asn1_string(L, ad->location->d.uniformResourceIdentifier);
+        count++;
+      }
+    }
+  }
+
+  AUTHORITY_INFO_ACCESS_free(info);
+
+  return count;
+}
+
+static int meth_signature_alg(lua_State *L)
+{
+  X509* peer = lsec_checkx509(L, 1);
+
+  push_asn1_objname(L, peer->sig_alg->algorithm, 0);
+
+  return 1;
+}
+
 /**
  * Collect X509 objects.
  */
@@ -465,6 +503,8 @@ static luaL_Reg methods[] = {
   {"validat",    meth_valid_at},
   {"bits",       meth_bits},
   {"crl",        meth_crl},
+  {"ocsp",       meth_ocsp},
+  {"signature_alg", meth_signature_alg},
   {NULL,         NULL}
 };
 

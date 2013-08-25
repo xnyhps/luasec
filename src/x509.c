@@ -382,6 +382,37 @@ static int meth_notafter(lua_State *L)
   return push_asn1_time(L, X509_get_notAfter(cert));
 }
 
+static int meth_crl(lua_State *L)
+{
+  X509* peer = lsec_checkx509(L, 1);
+  STACK_OF(DIST_POINT) *dps = X509_get_ext_d2i(peer, NID_crl_distribution_points, NULL, NULL);
+  DIST_POINT *dp;
+  STACK_OF(GENERAL_NAME) *names;
+  GENERAL_NAME *name;
+
+  if (dps == NULL || sk_DIST_POINT_num(dps) == 0) {
+    lua_pushnil(L);
+    return 1;
+  }
+
+  dp = sk_DIST_POINT_pop(dps);
+  names = dp->distpoint->name.fullname;
+
+  if (sk_GENERAL_NAME_num(names) == 0) {
+    lua_pushnil(L);
+    return 1;
+  }
+
+  name = sk_GENERAL_NAME_pop(names);
+  if (name->type == GEN_URI) {
+      push_asn1_string(L, name->d.uniformResourceIdentifier);
+      return 1;
+  } else {
+      lua_pushnil(L);
+      return 1;
+  }
+}
+
 /**
  * Collect X509 objects.
  */
@@ -433,6 +464,7 @@ static luaL_Reg methods[] = {
   {"subject",    meth_subject},
   {"validat",    meth_valid_at},
   {"bits",       meth_bits},
+  {"crl",        meth_crl},
   {NULL,         NULL}
 };
 

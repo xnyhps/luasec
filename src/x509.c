@@ -334,6 +334,28 @@ static int meth_bits(lua_State* L)
   return 1;
 }
 
+static int meth_modulus(lua_State* L)
+{
+  X509* cert = lsec_checkx509(L, 1);
+  EVP_PKEY *pktmp;
+  pktmp = X509_get_pubkey(cert);
+  char *tmp = NULL;
+  
+  if (EVP_PKEY_base_id(pktmp) == EVP_PKEY_RSA) {
+    tmp = BN_bn2hex(pktmp->pkey.rsa->n);
+    lua_pushstring(L, tmp);
+
+    OPENSSL_free(tmp);
+    EVP_PKEY_free(pktmp);
+
+    return 1;
+  }
+
+  EVP_PKEY_free(pktmp);
+
+  return 0;
+}
+
 /**
  * Check if the certificate is valid in a given time.
  */
@@ -505,6 +527,7 @@ static luaL_Reg methods[] = {
   {"crl",        meth_crl},
   {"ocsp",       meth_ocsp},
   {"signature_alg", meth_signature_alg},
+  {"modulus",    meth_modulus},
   {NULL,         NULL}
 };
 

@@ -659,6 +659,27 @@ static int meth_copyright(lua_State *L)
   return 1;
 }
 
+static int meth_ciphers(lua_State *L)
+{
+  p_ssl ssl = (p_ssl)luaL_checkudata(L, 1, "SSL:Connection");
+  SSL *s = ssl->ssl;
+  char buf[256] = {0};
+  int count = 0;
+  STACK_OF(SSL_CIPHER) *ciphers = s->session->ciphers;
+  int i;
+
+  if (!ciphers)
+    return 0;
+
+  for(i=0 ; i < sk_SSL_CIPHER_num(ciphers) ; ++i) {
+    SSL_CIPHER_description(sk_SSL_CIPHER_value(ciphers, i), buf, sizeof(buf));
+    lua_pushstring(L, buf);
+    count++;
+  }
+
+  return count;
+}
+
 /*---------------------------------------------------------------------------*/
 
 /**
@@ -680,6 +701,7 @@ static luaL_Reg methods[] = {
   {"send",                meth_send},
   {"settimeout",          meth_settimeout},
   {"want",                meth_want},
+  {"ciphers",             meth_ciphers},
   {NULL,                  NULL}
 };
 

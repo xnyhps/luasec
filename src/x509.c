@@ -339,10 +339,9 @@ static int meth_modulus(lua_State* L)
   X509* cert = lsec_checkx509(L, 1);
   EVP_PKEY *pktmp;
   pktmp = X509_get_pubkey(cert);
-  char *tmp = NULL;
-  
+
   if (EVP_PKEY_base_id(pktmp) == EVP_PKEY_RSA) {
-    tmp = BN_bn2hex(pktmp->pkey.rsa->n);
+    char *tmp = BN_bn2hex(pktmp->pkey.rsa->n);
     lua_pushstring(L, tmp);
 
     OPENSSL_free(tmp);

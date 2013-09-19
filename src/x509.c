@@ -284,6 +284,28 @@ static int meth_pem(lua_State* L)
 }
 
 /**
+ * Convert the certificate to ASN.1 format.
+ */
+static int meth_der(lua_State *L)
+{
+  char* data;
+  long bytes;
+  X509* cert = lsec_checkx509(L, 1);
+  BIO *bio = BIO_new(BIO_s_mem());
+  if (!i2d_X509_bio(bio, cert)) {
+    lua_pushnil(L);
+    return 1;
+  }
+  bytes = BIO_get_mem_data(bio, &data);
+  if (bytes > 0)
+    lua_pushlstring(L, data, bytes);
+  else
+    lua_pushnil(L);
+  BIO_free(bio);
+  return 1;
+}
+
+/**
  * Compute the fingerprint.
  */
 static int meth_digest(lua_State* L)
@@ -489,6 +511,7 @@ static int meth_tostring(lua_State *L)
   return 1;
 }
 
+
 /*---------------------------------------------------------------------------*/
 
 static int load_cert(lua_State* L)
@@ -520,6 +543,7 @@ static luaL_Reg methods[] = {
   {"notbefore",  meth_notbefore},
   {"notafter",   meth_notafter},
   {"pem",        meth_pem},
+  {"der",        meth_der},
   {"serial",     meth_serial},
   {"subject",    meth_subject},
   {"validat",    meth_valid_at},

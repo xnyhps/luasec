@@ -680,6 +680,37 @@ static int meth_ciphers(lua_State *L)
   return count;
 }
 
+
+static int meth_did_issue(lua_State *L)
+{
+
+  p_ssl ssl = (p_ssl)luaL_checkudata(L, 1, "SSL:Connection");
+  SSL *s = ssl->ssl;
+  SSL_CTX *ctx = SSL_get_SSL_CTX(s);
+  X509* issuer = lsec_checkx509(L, 2);
+  X509* issuee = lsec_checkx509(L, 3);
+  X509_STORE *store_ctx = SSL_CTX_get_cert_store(ctx);
+  X509_STORE_CTX xsc;
+  STACK_OF(X509) *chain = sk_X509_new_null();
+  sk_X509_push(chain, issuee);
+
+  if (!X509_STORE_CTX_init(&xsc, store_ctx, issuer, chain)) {
+    
+    sk_X509_free(chain);
+
+    lua_pushnil(L);
+    lua_pushstring(L, "X509_STORE_CTX_init");
+    return 2;
+  }
+
+  lua_pushnumber(L, xsc.check_issued(&xsc, issuee, issuer));
+
+  sk_X509_free(chain);
+  X509_STORE_CTX_cleanup(&xsc);
+
+  return 1;
+}
+
 /*---------------------------------------------------------------------------*/
 
 /**
@@ -702,6 +733,7 @@ static luaL_Reg methods[] = {
   {"settimeout",          meth_settimeout},
   {"want",                meth_want},
   {"ciphers",             meth_ciphers},
+  {"did_issue",    meth_did_issue},
   {NULL,                  NULL}
 };
 

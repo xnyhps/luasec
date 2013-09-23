@@ -494,6 +494,28 @@ static int meth_signature_alg(lua_State *L)
   return 1;
 }
 
+static int meth_spki(lua_State *L)
+{
+  X509* peer = lsec_checkx509(L, 1);
+  EVP_PKEY *pk = X509_get_pubkey(peer);
+
+  unsigned char *pp = NULL;
+  int len;
+  len = i2d_PUBKEY(pk, &pp);
+
+  if (len < 0){
+      EVP_PKEY_free(pk);
+      return 0;
+  }
+
+  lua_pushlstring(L, (char*)pp, len);
+
+  OPENSSL_free(pp);
+  EVP_PKEY_free(pk);
+
+  return 1;
+}
+
 /**
  * Collect X509 objects.
  */
@@ -551,6 +573,7 @@ static luaL_Reg methods[] = {
   {"ocsp",       meth_ocsp},
   {"signature_alg", meth_signature_alg},
   {"modulus",    meth_modulus},
+  {"spki",       meth_spki},
   {NULL,         NULL}
 };
 

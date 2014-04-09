@@ -23,7 +23,18 @@ local registry = setmetatable({}, {__mode="k"})
 context = { setcipher = function () return true end }
 
 function newcontext(cfg)
-  return cfg
+  local ctx = {}
+  for k, v in pairs(cfg) do
+    ctx[k] = v
+  end
+  if cfg.protocol == "sslv23" then
+    ctx.minprotocol = "sslv3"
+    ctx.maxprotocol = "tlsv1_2"
+  else
+    ctx.minprotocol = cfg.protocol
+    ctx.maxprotocol = cfg.protocol
+  end
+  return ctx
 end
 
 --
@@ -44,10 +55,11 @@ end
 --
 --
 function wrap(sock, cfg)
-   local s, msg = core.create(sock:getfd(), cfg)
+   local ctx = newcontext(cfg)
+   local s, msg = core.create(sock:getfd(), ctx)
    if s then
       sock:setfd(core.invalidfd)
-      registry[s] = cfg
+      registry[s] = ctx
       return s
    end
    return nil, msg 

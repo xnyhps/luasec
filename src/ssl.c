@@ -52,7 +52,7 @@ static int lsec_socket_error()
 static const char *ssl_ioerror(void *ctx, int err)
 {
   p_ssl ssl = (p_ssl)ctx;
-  
+
   if (err == LSEC_IO_SSL) {
     static char buffer[1024];
 
@@ -86,6 +86,8 @@ static int meth_destroy(lua_State *L)
   ssl_free(&ssl->ssl);
   pk_free(&ssl->pk);
   x509_crt_free(&ssl->crt);
+  if (ssl->ciphersuites) free(ssl->ciphersuites);
+  ssl->ciphersuites = NULL;
   return 0;
 }
 
@@ -244,6 +246,8 @@ static int meth_create(lua_State *L)
     return 2;
   }
 
+  memset(ssl, 0, sizeof(t_ssl));
+
   luaL_getmetatable(L, "SSL:Connection");
   lua_setmetatable(L, -2);
 
@@ -307,6 +311,51 @@ static int meth_create(lua_State *L)
           return 2;
         }
         ssl_set_ca_chain(&ssl->ssl, &ssl->ca_crt, NULL, NULL);
+      } else if (strcmp(key, "minprotocol") == 0 || strcmp(key, "maxprotocol") == 0) {
+        int minor_version;
+        if (strcmp(value, "sslv3") == 0) {
+          minor_version = SSL_MINOR_VERSION_0;
+        } else if (strcmp(value, "tlsv1") == 0) {
+          minor_version = SSL_MINOR_VERSION_1;
+        } else if (strcmp(value, "tlsv1_1") == 0) {
+          minor_version = SSL_MINOR_VERSION_2;
+        } else if (strcmp(value, "tlsv1_2") == 0) {
+          minor_version = SSL_MINOR_VERSION_3;
+        } else {
+          lua_pop(L, 3);
+          lua_pushnil(L);
+          lua_pushfstring(L, "unsupported protocol value %s", value);
+          return 2;
+        }
+        if (strcmp(key, "minprotocol") == 0) {
+          ssl_set_min_version(&ssl->ssl, SSL_MAJOR_VERSION_3, minor_version);
+        } else {
+          ssl_set_max_version(&ssl->ssl, SSL_MAJOR_VERSION_3, minor_version);
+        }
+      } else if (strcmp(key, "ciphersuites") == 0) {
+        const int n = lua_rawlen(L, -2);
+        int i = 0;
+        
+        ssl->ciphersuites = (int *)malloc((n + 1) * (sizeof(int)));
+
+        lua_pushvalue(L, -2);
+        lua_pushnil(L);
+
+        while (lua_next(L, -2)) {
+          lua_pushvalue(L, -2);
+
+          int cipher_id = ssl_get_ciphersuite_id(lua_tostring(L, -2));
+
+          ssl->ciphersuites[i] = cipher_id;
+          i++;
+          
+          lua_pop(L, 2);
+        }
+        
+        ssl->ciphersuites[i] = 0;
+        ssl_set_ciphersuites(&ssl->ssl, ssl->ciphersuites);
+
+        lua_pop(L, 1);
       }
     lua_pop(L, 2);
   }

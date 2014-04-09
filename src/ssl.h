@@ -36,6 +36,7 @@ typedef struct t_ssl_ {
   pk_context pk;
   x509_crt crt;
   x509_crt ca_crt;
+  int *ciphersuites;
   int state;
   int error;
   ctr_drbg_context ctr_drbg;

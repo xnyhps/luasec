@@ -85,7 +85,8 @@ static time_t x509_time_to_time_t(x509_time *xtime)
 static int meth_subject(lua_State* L)
 {
   x509_crt *cert = lsec_checkx509(L, 1);
-  return push_x509_name(L, &cert->subject);
+  lua_newtable(L);
+  return 1;
 }
 
 /**
@@ -104,7 +105,9 @@ static int meth_extensions(lua_State* L)
 {
   x509_crt *cert = lsec_checkx509(L, 1);
 
-  abort();
+  lua_newtable(L);
+
+  return 1;
 }
 
 /**

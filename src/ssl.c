@@ -101,6 +101,8 @@ static int handshake(p_ssl ssl)
   for ( ; ; ) {
     err = ssl_handshake_step(&ssl->ssl);
 
+    ssl->error = err;
+
     switch (err) {
       case 0:
         break;
@@ -549,23 +551,30 @@ static int meth_getpeerverification(lua_State *L)
     return 1;
   }
   lua_pushboolean(L, 0);
+  lua_newtable(L);
+  lua_newtable(L);
   if ((res & BADCERT_EXPIRED) != 0) {
     lua_pushstring(L, "The certificate is expired");
+    lua_rawseti(L,-2,n);
     n++;
   }
   if ((res & BADCERT_REVOKED) != 0) {
     lua_pushstring(L, "The certificate is revoked");
+    lua_rawseti(L,-2,n);
     n++;
   }
   if ((res & BADCERT_CN_MISMATCH) != 0) {
     lua_pushstring(L, "The certificate's CN does not match");
+    lua_rawseti(L,-2,n);
     n++;
   }
   if ((res & BADCERT_NOT_TRUSTED) != 0) {
     lua_pushstring(L, "The certificate is not trusted");
+    lua_rawseti(L,-2,n);
     n++;
   }
-  return n;
+  lua_rawseti(L,-2,1);
+  return 2;
 }
 
 /**

@@ -6,7 +6,7 @@
 
 local core    = require("ssl.core")
 -- local context = require("ssl.context")
--- local x509    = require("ssl.x509")
+local x509    = require("ssl.x509")
 
 module("ssl", package.seeall)
 
@@ -14,7 +14,7 @@ _VERSION   = "0.5.PR"
 _COPYRIGHT = core.copyright()
 
 -- Export
-loadcertificate = nil -- x509.load
+loadcertificate = x509.load
 
 -- We must prevent the contexts to be collected before the connections,
 -- otherwise the C registry will be cleared.
@@ -65,17 +65,9 @@ local function info(ssl, field)
     return comp
   end
   local info = {compression = comp}
-  str, info.bits, info.algbits, protocol = core.info(ssl)
-  if str then
-    info.cipher, info.protocol, info.key,
-    info.authentication, info.encryption, info.mac =
-        string.match(str, 
-          "^(%S+)%s+(%S+)%s+Kx=(%S+)%s+Au=(%S+)%s+Enc=(%S+)%s+Mac=(%S+)")
-    info.export = (string.match(str, "%sexport%s*$") ~= nil)
-  end
-  if protocol then
-    info.protocol = protocol
-  end
+  info.cipher, info.encryption, info.bits, info.mac, info.key, info.authentication = core.info(ssl)
+  info.algbits = info.bits
+  info.export = false
   if field then
     return info[field]
   end

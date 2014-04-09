@@ -2,6 +2,7 @@ CMOD=ssl.so
 LMOD=ssl.lua
 
 OBJS= \
+ x509.o \
  ssl.o
 
 LIBS=-lpolarssl -lluasocket

@@ -31,7 +31,7 @@
 
 static void *g_EntropyKey;
 
-// #include "x509.h"
+#include "x509.h"
 #include "ssl.h"
 
 /**
@@ -297,7 +297,7 @@ static int meth_create(lua_State *L)
   ssl_set_endpoint(&ssl->ssl, mode);
   ssl_set_authmode(&ssl->ssl, SSL_VERIFY_NONE);
   ssl_set_bio(&ssl->ssl, net_recv, &ssl->sock, net_send, &ssl->sock);
-  ssl_set_dbg(&ssl->ssl, my_debug, stdout);
+  // ssl_set_dbg(&ssl->ssl, my_debug, stdout);
 
   entropy_context *entropy;
 
@@ -318,7 +318,7 @@ static int meth_create(lua_State *L)
   }
 
   ssl_set_rng(&ssl->ssl, ctr_drbg_random, &ssl->ctr_drbg);
-  ssl_set_session(&ssl->ssl, &ssl->ssn);
+  // ssl_set_session(&ssl->ssl, &ssl->ssn);
 
   io_init(&ssl->io, (p_send)ssl_send, (p_recv)ssl_recv, 
     (p_error) ssl_ioerror, ssl);
@@ -438,105 +438,74 @@ static int meth_settimeout(lua_State *L)
 /**
  * Return the compression method used.
  */
-// static int meth_compression(lua_State *L)
-// {
-//   const COMP_METHOD *comp;
-//   p_ssl ssl = (p_ssl)luaL_checkudata(L, 1, "SSL:Connection");
-//   if (ssl->state != LSEC_STATE_CONNECTED) {
-//     lua_pushnil(L);
-//     lua_pushstring(L, "closed");
-//     return 2;
-//   }
-//   comp = SSL_get_current_compression(ssl->ssl);
-//   if (comp)
-//     lua_pushstring(L, SSL_COMP_get_name(comp));
-//   else
-//     lua_pushnil(L);
-//   return 1;
-// }
+static int meth_compression(lua_State *L)
+{
+  p_ssl ssl = (p_ssl)luaL_checkudata(L, 1, "SSL:Connection");
+  int compression = ssl->ssl.session->compression;
+
+  if (compression == SSL_COMPRESS_NULL) {
+    lua_pushstring(L, "NULL");
+  } else {
+    lua_pushstring(L, "Deflate");
+  }
+
+  return 1;
+}
 
 /**
  * Return the nth certificate of the peer's chain.
  */
-// static int meth_getpeercertificate(lua_State *L)
-// {
-//   int n;
-//   X509 *cert;
-//   STACK_OF(X509) *certs;
-//   p_ssl ssl = (p_ssl)luaL_checkudata(L, 1, "SSL:Connection");
-//   if (ssl->state != LSEC_STATE_CONNECTED) {
-//     lua_pushnil(L);
-//     lua_pushstring(L, "closed");
-//     return 2;
-//   }
-//   /* Default to the first cert */ 
-//   n = luaL_optint(L, 2, 1);                           
-//   /* This function is 1-based, but OpenSSL is 0-based */
-//   --n;
-//   if (n < 0) {
-//     lua_pushnil(L);
-//     lua_pushliteral(L, "invalid certificate index");
-//     return 2;
-//   }
-//   if (n == 0) {
-//     cert = SSL_get_peer_certificate(ssl->ssl);
-//     if (cert)
-//       lsec_pushx509(L, cert);
-//     else
-//       lua_pushnil(L);
-//     return 1;
-//   }
-//   /* In a server-context, the stack doesn't contain the peer cert,
-//    * so adjust accordingly.
-//    */
-//   if (ssl->ssl->server)
-//     --n;
-//   certs = SSL_get_peer_cert_chain(ssl->ssl);
-//   if (n >= sk_X509_num(certs)) {
-//     lua_pushnil(L);
-//     return 1;
-//   }
-//   cert = sk_X509_value(certs, n);
-//   /* Increment the reference counting of the object. */
-//   /* See SSL_get_peer_certificate() source code.     */
-//   CRYPTO_add(&cert->references, 1, CRYPTO_LOCK_X509);
-//   lsec_pushx509(L, cert);
-//   return 1;
-// }
+static int meth_getpeercertificate(lua_State *L)
+{
+  int n;
+  const x509_crt *cert;
+  p_ssl ssl = (p_ssl)luaL_checkudata(L, 1, "SSL:Connection");
+  if (ssl->state != LSEC_STATE_CONNECTED) {
+    lua_pushnil(L);
+    lua_pushstring(L, "closed");
+    return 2;
+  }
+  /* Default to the first cert */
+  n = luaL_optint(L, 2, 1);
+  /* This function is 1-based, but OpenSSL is 0-based */
+  if (n < 0) {
+    lua_pushnil(L);
+    lua_pushliteral(L, "invalid certificate index");
+    return 2;
+  }
+  cert = ssl_get_peer_cert(&ssl->ssl);
+  while (n > 1) {
+    n--;
+    cert = cert ? cert->next : NULL;
+  }
+  if (cert)
+    lsec_pushx509(L, cert);
+  else
+    lua_pushnil(L);
+  return 1;
+}
 
 /**
  * Return the chain of certificate of the peer.
  */
-// static int meth_getpeerchain(lua_State *L)
-// {
-//   int i;
-//   int idx = 1;
-//   int n_certs;
-//   X509 *cert;
-//   STACK_OF(X509) *certs;
-//   p_ssl ssl = (p_ssl)luaL_checkudata(L, 1, "SSL:Connection");
-//   if (ssl->state != LSEC_STATE_CONNECTED) {
-//     lua_pushnil(L);
-//     lua_pushstring(L, "closed");
-//     return 2;
-//   }
-//   lua_newtable(L);
-//   if (ssl->ssl->server) {
-//     lsec_pushx509(L, SSL_get_peer_certificate(ssl->ssl));
-//     lua_rawseti(L, -2, idx++);
-//   }
-//   certs = SSL_get_peer_cert_chain(ssl->ssl);
-//   n_certs = sk_X509_num(certs);
-//   for (i = 0; i < n_certs; i++) {
-//     cert = sk_X509_value(certs, i);
-//     /* Increment the reference counting of the object. */
-//     /* See SSL_get_peer_certificate() source code.     */
-//     CRYPTO_add(&cert->references, 1, CRYPTO_LOCK_X509);
-//     lsec_pushx509(L, cert);
-//     lua_rawseti(L, -2, idx++);
-//   }
-//   return 1;
-// }
+static int meth_getpeerchain(lua_State *L)
+{
+  int n = 0;
+  const x509_crt *cert;
+  p_ssl ssl = (p_ssl)luaL_checkudata(L, 1, "SSL:Connection");
+  if (ssl->state != LSEC_STATE_CONNECTED) {
+    lua_pushnil(L);
+    lua_pushstring(L, "closed");
+    return 2;
+  }
+  cert = ssl_get_peer_cert(&ssl->ssl);
+  while (cert) {
+    n++;
+    lsec_pushx509(L, cert);
+    cert = cert->next;
+  }
+  return n;
+}
 
 /**
  * Copy the table src to the table dst.
@@ -670,27 +639,61 @@ static int meth_setmethod(lua_State *L)
   return 0;
 }
 
+static const char *key_exchange_name(key_exchange_type_t key_exchange)
+{
+  switch (key_exchange) {
+    case POLARSSL_KEY_EXCHANGE_NONE: return "None";
+    case POLARSSL_KEY_EXCHANGE_RSA: return "RSA";
+    case POLARSSL_KEY_EXCHANGE_DHE_RSA: return "DHE";
+    case POLARSSL_KEY_EXCHANGE_ECDHE_RSA: return "ECDHE";
+    case POLARSSL_KEY_EXCHANGE_ECDHE_ECDSA: return "ECDHE";
+    case POLARSSL_KEY_EXCHANGE_PSK: return "PSK";
+    case POLARSSL_KEY_EXCHANGE_DHE_PSK: return "DHE";
+    case POLARSSL_KEY_EXCHANGE_RSA_PSK: return "RSA";
+    case POLARSSL_KEY_EXCHANGE_ECDHE_PSK: return "ECDHE";
+    case POLARSSL_KEY_EXCHANGE_ECDH_RSA: return "ECDH";
+    case POLARSSL_KEY_EXCHANGE_ECDH_ECDSA: return "ECDH";
+    default: return "???";
+  }
+}
+
+static const char *auth_name(key_exchange_type_t key_exchange)
+{
+  switch (key_exchange) {
+    case POLARSSL_KEY_EXCHANGE_NONE: return "None";
+    case POLARSSL_KEY_EXCHANGE_RSA: return "RSA";
+    case POLARSSL_KEY_EXCHANGE_DHE_RSA: return "RSA";
+    case POLARSSL_KEY_EXCHANGE_ECDHE_RSA: return "RSA";
+    case POLARSSL_KEY_EXCHANGE_ECDHE_ECDSA: return "ECDSA";
+    case POLARSSL_KEY_EXCHANGE_PSK: return "PSK";
+    case POLARSSL_KEY_EXCHANGE_DHE_PSK: return "PSK";
+    case POLARSSL_KEY_EXCHANGE_RSA_PSK: return "PSK";
+    case POLARSSL_KEY_EXCHANGE_ECDHE_PSK: return "PSK";
+    case POLARSSL_KEY_EXCHANGE_ECDH_RSA: return "RSA";
+    case POLARSSL_KEY_EXCHANGE_ECDH_ECDSA: return "ECDSA";
+    default: return "???";
+  }
+}
+
 /**
  * Return information about the connection.
  */
-// static int meth_info(lua_State *L)
-// {
-//   int bits = 0;
-//   int algbits = 0;
-//   char buf[256] = {0};
-//   const SSL_CIPHER *cipher;
-//   p_ssl ssl = (p_ssl)luaL_checkudata(L, 1, "SSL:Connection");
-//   cipher = SSL_get_current_cipher(ssl->ssl);
-//   if (!cipher)
-//     return 0;
-//   SSL_CIPHER_description(cipher, buf, sizeof(buf));
-//   bits = SSL_CIPHER_get_bits(cipher, &algbits);
-//   lua_pushstring(L, buf);
-//   lua_pushnumber(L, bits);
-//   lua_pushnumber(L, algbits);
-//   lua_pushstring(L, SSL_get_version(ssl->ssl));
-//   return 4;
-// }
+static int meth_info(lua_State *L)
+{
+  p_ssl ssl = (p_ssl)luaL_checkudata(L, 1, "SSL:Connection");
+  int cipher_id = ssl->ssl.session->ciphersuite;
+  const ssl_ciphersuite_t *ciphersuite = ssl_ciphersuite_from_id(cipher_id);
+  const cipher_info_t *cipher_info = cipher_info_from_type(ciphersuite->cipher);
+  const md_info_t *md_info = md_info_from_type(ciphersuite->mac);
+
+  lua_pushstring(L, ciphersuite->name);
+  lua_pushstring(L, cipher_info->name);
+  lua_pushnumber(L, cipher_info->key_length);
+  lua_pushstring(L, md_info->name);
+  lua_pushstring(L, key_exchange_name(ciphersuite->key_exchange));
+  lua_pushstring(L, auth_name(ciphersuite->key_exchange));
+  return 6;
+}
 
 static int meth_copyright(lua_State *L)
 {
@@ -711,8 +714,8 @@ static luaL_Reg methods[] = {
   {"close",               meth_close},
   {"getfd",               meth_getfd},
   // {"getfinished",         meth_getfinished},
-  // {"getpeercertificate",  meth_getpeercertificate},
-  // {"getpeerchain",        meth_getpeerchain},
+  {"getpeercertificate",  meth_getpeercertificate},
+  {"getpeerchain",        meth_getpeerchain},
   // {"getpeerverification", meth_getpeerverification},
   // {"getpeerfinished",     meth_getpeerfinished},
   {"getstats",            meth_getstats},
@@ -739,9 +742,9 @@ static luaL_Reg meta[] = {
  * SSL functions. 
  */
 static luaL_Reg funcs[] = {
-  // {"compression", meth_compression},
+  {"compression", meth_compression},
   {"create",      meth_create},
-  // {"info",        meth_info},
+  {"info",        meth_info},
   // {"setfd",       meth_setfd},
   {"setmethod",   meth_setmethod},
   {"copyright",   meth_copyright},

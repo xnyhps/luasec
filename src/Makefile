@@ -2,11 +2,9 @@ CMOD=ssl.so
 LMOD=ssl.lua
 
 OBJS= \
- x509.o \
- context.o \
  ssl.o
 
-LIBS=-lssl -lcrypto -lluasocket
+LIBS=-lpolarssl -lluasocket
 
 WARN=-Wall -pedantic
 
@@ -17,7 +15,7 @@ LNX_CFLAGS=-O2 -fPIC $(WARN) $(INCDIR) $(DEFS)
 LNX_LDFLAGS=-O -fPIC -shared $(LIBDIR)
 
 MAC_ENV=env MACOSX_DEPLOYMENT_TARGET='$(MACVER)'
-MAC_CFLAGS=-O2 -fno-common $(WARN) $(INCDIR) $(DEFS)
+MAC_CFLAGS=-O0 -g -fno-common $(WARN) $(INCDIR) $(DEFS)
 MAC_LDFLAGS=-bundle -undefined dynamic_lookup $(LIBDIR)
 
 INSTALL	?= install

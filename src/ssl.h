@@ -7,7 +7,6 @@
  *
  *--------------------------------------------------------------------------*/
 
-#include <openssl/ssl.h>
 #include <lua.h>
 
 #include <luasocket/io.h>
@@ -15,8 +14,11 @@
 #include <luasocket/timeout.h>
 #include <luasocket/socket.h>
 
+#include <polarssl/ssl.h>
+#include <polarssl/entropy.h>
+
 #include "config.h"
-#include "context.h"
+// #include "context.h"
 
 #define LSEC_STATE_NEW       1
 #define LSEC_STATE_CONNECTED 2
@@ -29,9 +31,13 @@ typedef struct t_ssl_ {
   t_io io;
   t_buffer buf;
   t_timeout tm;
-  SSL *ssl;
+  ssl_context ssl;
+  ssl_session ssn;
+  pk_context pk;
+  x509_crt crt;
   int state;
   int error;
+  ctr_drbg_context ctr_drbg;
 } t_ssl;
 typedef t_ssl* p_ssl;
 

@@ -7,8 +7,6 @@
 #ifndef LSEC_EC_H
 #define LSEC_EC_H
 
-#include <openssl/objects.h>
-
 typedef struct t_ec_ {
   char *name;
   int nid;

@@ -9,7 +9,6 @@
 #ifndef LSEC_X509_H
 #define LSEC_X509_H
 
-#include <openssl/x509v3.h>
 #include <lua.h>
 
 #include "config.h"

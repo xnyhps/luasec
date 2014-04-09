@@ -35,6 +35,7 @@ typedef struct t_ssl_ {
   ssl_session ssn;
   pk_context pk;
   x509_crt crt;
+  x509_crt ca_crt;
   int state;
   int error;
   ctr_drbg_context ctr_drbg;

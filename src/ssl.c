@@ -52,8 +52,15 @@ static int lsec_socket_error()
 static const char *ssl_ioerror(void *ctx, int err)
 {
   p_ssl ssl = (p_ssl)ctx;
+  
   if (err == LSEC_IO_SSL) {
     static char buffer[1024];
+
+    if (ssl->error == POLARSSL_ERR_NET_WANT_WRITE) {
+      return "wantwrite";
+    } else if (ssl->error == POLARSSL_ERR_NET_WANT_READ) {
+      return "wantread";
+    }
     
     polarssl_strerror(ssl->error, buffer, 1024);
 
@@ -192,6 +199,9 @@ static int ssl_recv(void *ctx, char *data, size_t count, size_t *got,
 
     switch (ssl->error) {
       case 0:
+        if (err == 0) {
+          return IO_CLOSED;
+        }
         *got = err;
         return IO_DONE;
       case POLARSSL_ERR_NET_WANT_READ:
@@ -238,6 +248,7 @@ static int meth_create(lua_State *L)
   ssl_init(&ssl->ssl);
   pk_init(&ssl->pk);
   x509_crt_init(&ssl->crt);
+  x509_crt_init(&ssl->ca_crt);
 
   lua_pushvalue(L, 2);
   lua_pushnil(L);
@@ -281,8 +292,20 @@ static int meth_create(lua_State *L)
         lua_pushstring(L, "invalid mode, must be client or server");
         return 2;
       }
-    }
-    printf("%s => %s\n", key, value);
+    } else if (strcmp(key, "cafile") == 0) {
+        if ((res = x509_crt_parse_file(&ssl->ca_crt, value)) != 0) {
+          lua_pop(L, 3);
+          lua_pushnil(L);
+
+          char buffer[1024];
+
+          polarssl_strerror(res, buffer, 1024);
+
+          lua_pushfstring(L, "error reading cafile: %s", buffer);
+          return 2;
+        }
+        ssl_set_ca_chain(&ssl->ssl, &ssl->ca_crt, NULL, NULL);
+      }
     lua_pop(L, 2);
   }
 
@@ -295,7 +318,7 @@ static int meth_create(lua_State *L)
   
   ssl_set_own_cert(&ssl->ssl, &ssl->crt, &ssl->pk);
   ssl_set_endpoint(&ssl->ssl, mode);
-  ssl_set_authmode(&ssl->ssl, SSL_VERIFY_NONE);
+  ssl_set_authmode(&ssl->ssl, SSL_VERIFY_OPTIONAL);
   ssl_set_bio(&ssl->ssl, net_recv, &ssl->sock, net_send, &ssl->sock);
   // ssl_set_dbg(&ssl->ssl, my_debug, stdout);
 
@@ -407,15 +430,15 @@ static int meth_settimeout(lua_State *L)
 /**
  * Check if there is data in the buffer.
  */
-// static int meth_dirty(lua_State *L)
-// {
-//   int res = 0;
-//   p_ssl ssl = (p_ssl)luaL_checkudata(L, 1, "SSL:Connection");
-//   if (ssl->state != LSEC_STATE_CLOSED)
-//     res = !buffer_isempty(&ssl->buf) || SSL_pending(ssl->ssl);
-//   lua_pushboolean(L, res);
-//   return 1;
-// }
+static int meth_dirty(lua_State *L)
+{
+  int res = 0;
+  p_ssl ssl = (p_ssl)luaL_checkudata(L, 1, "SSL:Connection");
+  if (ssl->state != LSEC_STATE_CLOSED)
+    res = !buffer_isempty(&ssl->buf) || ssl_get_bytes_avail(&ssl->ssl) > 0;
+  lua_pushboolean(L, res);
+  return 1;
+}
 
 /**
  * Return the state information about the SSL object.
@@ -508,57 +531,42 @@ static int meth_getpeerchain(lua_State *L)
 }
 
 /**
- * Copy the table src to the table dst.
- */
-static void copy_error_table(lua_State *L, int src, int dst)
-{
-  lua_pushnil(L); 
-  while (lua_next(L, src) != 0) {
-    if (lua_istable(L, -1)) {
-      /* Replace the table with its copy */
-      lua_newtable(L);
-      copy_error_table(L, dst+2, dst+3);
-      lua_remove(L, dst+2);
-    }
-    lua_pushvalue(L, -2);
-    lua_pushvalue(L, -2);
-    lua_rawset(L, dst);
-    /* Remove the value and leave the key */
-    lua_pop(L, 1);
-  }
-}
-
-/**
  * Return the verification state of the peer chain.
  */
-// static int meth_getpeerverification(lua_State *L)
-// {
-//   long err;
-//   p_ssl ssl = (p_ssl)luaL_checkudata(L, 1, "SSL:Connection");
-//   if (ssl->state != LSEC_STATE_CONNECTED) {
-//     lua_pushboolean(L, 0);
-//     lua_pushstring(L, "closed");
-//     return 2;
-//   }
-//   err = SSL_get_verify_result(ssl->ssl);
-//   if (err == X509_V_OK) {
-//     lua_pushboolean(L, 1);
-//     return 1;
-//   }
-//   luaL_getmetatable(L, "SSL:Verify:Registry");
-//   lua_pushlightuserdata(L, (void*)ssl->ssl);
-//   lua_gettable(L, -2);
-//   if (lua_isnil(L, -1))
-//     lua_pushstring(L, X509_verify_cert_error_string(err));
-//   else {
-//     /* Copy the table of errors to avoid modifications */
-//     lua_newtable(L);
-//     copy_error_table(L, lua_gettop(L)-1, lua_gettop(L));
-//   }
-//   lua_pushboolean(L, 0);
-//   lua_pushvalue(L, -2);
-//   return 2;
-// }
+static int meth_getpeerverification(lua_State *L)
+{
+  int res;
+  int n = 1;
+  p_ssl ssl = (p_ssl)luaL_checkudata(L, 1, "SSL:Connection");
+  if (ssl->state != LSEC_STATE_CONNECTED) {
+    lua_pushboolean(L, 0);
+    lua_pushstring(L, "closed");
+    return 2;
+  }
+  res = ssl_get_verify_result(&ssl->ssl);
+  if (res == 0) {
+    lua_pushboolean(L, 1);
+    return 1;
+  }
+  lua_pushboolean(L, 0);
+  if ((res & BADCERT_EXPIRED) != 0) {
+    lua_pushstring(L, "The certificate is expired");
+    n++;
+  }
+  if ((res & BADCERT_REVOKED) != 0) {
+    lua_pushstring(L, "The certificate is revoked");
+    n++;
+  }
+  if ((res & BADCERT_CN_MISMATCH) != 0) {
+    lua_pushstring(L, "The certificate's CN does not match");
+    n++;
+  }
+  if ((res & BADCERT_NOT_TRUSTED) != 0) {
+    lua_pushstring(L, "The certificate is not trusted");
+    n++;
+  }
+  return n;
+}
 
 /**
  * Get the latest "Finished" message sent out.
@@ -692,7 +700,8 @@ static int meth_info(lua_State *L)
   lua_pushstring(L, md_info->name);
   lua_pushstring(L, key_exchange_name(ciphersuite->key_exchange));
   lua_pushstring(L, auth_name(ciphersuite->key_exchange));
-  return 6;
+  lua_pushstring(L, ssl_get_version(&ssl->ssl));
+  return 7;
 }
 
 static int meth_copyright(lua_State *L)
@@ -716,11 +725,11 @@ static luaL_Reg methods[] = {
   // {"getfinished",         meth_getfinished},
   {"getpeercertificate",  meth_getpeercertificate},
   {"getpeerchain",        meth_getpeerchain},
-  // {"getpeerverification", meth_getpeerverification},
+  {"getpeerverification", meth_getpeerverification},
   // {"getpeerfinished",     meth_getpeerfinished},
   {"getstats",            meth_getstats},
   {"setstats",            meth_setstats},
-  // {"dirty",               meth_dirty},
+  {"dirty",               meth_dirty},
   {"dohandshake",         meth_handshake},
   {"receive",             meth_receive},
   {"send",                meth_send},

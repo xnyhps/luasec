@@ -20,6 +20,8 @@ loadcertificate = x509.load
 -- otherwise the C registry will be cleared.
 local registry = setmetatable({}, {__mode="k"})
 
+context = { setcipher = function () return true end }
+
 function newcontext(cfg)
   return cfg
 end
@@ -65,7 +67,7 @@ local function info(ssl, field)
     return comp
   end
   local info = {compression = comp}
-  info.cipher, info.encryption, info.bits, info.mac, info.key, info.authentication = core.info(ssl)
+  info.cipher, info.encryption, info.bits, info.mac, info.key, info.authentication, info.protocol = core.info(ssl)
   info.algbits = info.bits
   info.export = false
   if field then

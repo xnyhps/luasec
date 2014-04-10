@@ -18,6 +18,7 @@
 #include <lauxlib.h>
 
 #include <polarssl/base64.h>
+#include <polarssl/oid.h>
 
 #include "x509.h"
 
@@ -47,12 +48,29 @@ x509_crt* lsec_checkx509(lua_State* L, int idx)
  */
 static int push_x509_name(lua_State *L, x509_name *name)
 {
-  char buffer[1024];
+  char oid[256];
+  int i = 0;
 
-  if (x509_dn_gets(buffer, 1024, name) >= 0) {
-    lua_pushstring(L, buffer);
-  } else {
-    lua_pushnil(L);
+  lua_newtable(L);
+
+  while (name) {
+    if (!name->oid.p) {
+      name = name->next;
+      continue;
+    }
+
+    if (oid_get_numeric_string(oid, 256, &name->oid) >= 0) {
+      lua_newtable(L);
+      lua_pushstring(L, oid);
+      lua_setfield(L, -2, "oid");
+      // lua_setfield(L, -2, "name");
+      lua_pushlstring(L, (const char *)name->val.p, name->val.len);
+      lua_setfield(L, -2, "value");
+      lua_rawseti(L, -2, i+1);
+    }
+
+    i++;
+    name = name->next;
   }
 
   return 1;
@@ -85,8 +103,7 @@ static time_t x509_time_to_time_t(x509_time *xtime)
 static int meth_subject(lua_State* L)
 {
   x509_crt *cert = lsec_checkx509(L, 1);
-  lua_newtable(L);
-  return 1;
+  return push_x509_name(L, &cert->subject);
 }
 
 /**

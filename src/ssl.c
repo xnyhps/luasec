@@ -35,18 +35,6 @@ static void *g_EntropyKey;
 #include "ssl.h"
 
 /**
- * Underline socket error.
- */
-static int lsec_socket_error()
-{
-#if defined(WIN32)
-  return WSAGetLastError();
-#else
-  return errno;
-#endif
-}
-
-/**
  * Map error code into string.
  */
 static const char *ssl_ioerror(void *ctx, int err)
@@ -237,6 +225,8 @@ static int meth_create(lua_State *L)
   p_ssl ssl;
   int fd = luaL_checkint(L, 1);
   int mode = SSL_IS_CLIENT;
+  int lsec_continue = 0;
+  int verify_peer = 0;
   int res;
 
   ssl = (p_ssl)lua_newuserdata(L, sizeof(t_ssl));
@@ -256,111 +246,214 @@ static int meth_create(lua_State *L)
   x509_crt_init(&ssl->crt);
   x509_crt_init(&ssl->ca_crt);
 
-  lua_pushvalue(L, 2);
-  lua_pushnil(L);
-  
-  while (lua_next(L, -2)) {
-    lua_pushvalue(L, -2);
-    const char *key = lua_tostring(L, -1);
-    const char *value = lua_tostring(L, -2);
+  // ----------------------------------------------------------------------- //
 
-    if (strcmp(key, "key") == 0) {
-      if ((res = pk_parse_keyfile(&ssl->pk, value, NULL)) != 0) {
-        lua_pop(L, 3);
-        lua_pushnil(L);
+  lua_getfield(L, 2, "key");
 
-        char buffer[1024];
+  if (lua_isstring(L, -1)) {
+    const char *path = luaL_checkstring(L, -1);
+    if ((res = pk_parse_keyfile(&ssl->pk, path, NULL)) != 0) {
+      char buffer[1024];
 
-        polarssl_strerror(res, buffer, 1024);
+      lua_pop(L, 1);
 
-        lua_pushfstring(L, "error reading private key: %s", buffer);
-        return 2;
-      }
-    } else if (strcmp(key, "certificate") == 0) {
-      if ((res = x509_crt_parse_file(&ssl->crt, value)) != 0) {
-        lua_pop(L, 3);
-        lua_pushnil(L);
+      lua_pushnil(L);
 
-        char buffer[1024];
+      polarssl_strerror(res, buffer, 1024);
 
-        polarssl_strerror(res, buffer, 1024);
-
-        lua_pushfstring(L, "error reading certificate: %s", buffer);
-        return 2;
-      }
-    } else if (strcmp(key, "mode") == 0) {
-      if (strcmp(value, "client") == 0) {
-        mode = SSL_IS_CLIENT;
-      } else if (strcmp(value, "server") == 0) {
-        mode = SSL_IS_SERVER;
-      } else {
-        lua_pushnil(L);
-        lua_pushstring(L, "invalid mode, must be client or server");
-        return 2;
-      }
-    } else if (strcmp(key, "cafile") == 0) {
-        if ((res = x509_crt_parse_file(&ssl->ca_crt, value)) != 0) {
-          lua_pop(L, 3);
-          lua_pushnil(L);
-
-          char buffer[1024];
-
-          polarssl_strerror(res, buffer, 1024);
-
-          lua_pushfstring(L, "error reading cafile: %s", buffer);
-          return 2;
-        }
-        ssl_set_ca_chain(&ssl->ssl, &ssl->ca_crt, NULL, NULL);
-      } else if (strcmp(key, "minprotocol") == 0 || strcmp(key, "maxprotocol") == 0) {
-        int minor_version;
-        if (strcmp(value, "sslv3") == 0) {
-          minor_version = SSL_MINOR_VERSION_0;
-        } else if (strcmp(value, "tlsv1") == 0) {
-          minor_version = SSL_MINOR_VERSION_1;
-        } else if (strcmp(value, "tlsv1_1") == 0) {
-          minor_version = SSL_MINOR_VERSION_2;
-        } else if (strcmp(value, "tlsv1_2") == 0) {
-          minor_version = SSL_MINOR_VERSION_3;
-        } else {
-          lua_pop(L, 3);
-          lua_pushnil(L);
-          lua_pushfstring(L, "unsupported protocol value %s", value);
-          return 2;
-        }
-        if (strcmp(key, "minprotocol") == 0) {
-          ssl_set_min_version(&ssl->ssl, SSL_MAJOR_VERSION_3, minor_version);
-        } else {
-          ssl_set_max_version(&ssl->ssl, SSL_MAJOR_VERSION_3, minor_version);
-        }
-      } else if (strcmp(key, "ciphersuites") == 0) {
-        const int n = lua_rawlen(L, -2);
-        int i = 0;
-        
-        ssl->ciphersuites = (int *)malloc((n + 1) * (sizeof(int)));
-
-        lua_pushvalue(L, -2);
-        lua_pushnil(L);
-
-        while (lua_next(L, -2)) {
-          lua_pushvalue(L, -2);
-
-          int cipher_id = ssl_get_ciphersuite_id(lua_tostring(L, -2));
-
-          ssl->ciphersuites[i] = cipher_id;
-          i++;
-          
-          lua_pop(L, 2);
-        }
-        
-        ssl->ciphersuites[i] = 0;
-        ssl_set_ciphersuites(&ssl->ssl, ssl->ciphersuites);
-
-        lua_pop(L, 1);
-      }
-    lua_pop(L, 2);
+      lua_pushfstring(L, "error reading private key from %s: %s", path, buffer);
+      
+      return 2;
+    }
   }
 
   lua_pop(L, 1);
+
+  // ----------------------------------------------------------------------- //
+
+  lua_getfield(L, 2, "certificate");
+
+  if (lua_isstring(L, -1)) {
+    const char *path = luaL_checkstring(L, -1);
+    if ((res = x509_crt_parse_file(&ssl->crt, path)) != 0) {
+      lua_pop(L, 3);
+      lua_pushnil(L);
+
+      char buffer[1024];
+
+      polarssl_strerror(res, buffer, 1024);
+
+      lua_pushfstring(L, "error reading certificate from %s: %s", path, buffer);
+      return 2;
+    }
+  }
+
+  lua_pop(L, 1);
+
+  // ----------------------------------------------------------------------- //
+
+  lua_getfield(L, 2, "cafile");
+
+  if (lua_isstring(L, -1)) {
+    const char *path = luaL_checkstring(L, -1);
+    if ((res = x509_crt_parse_file(&ssl->ca_crt, path)) != 0) {
+      lua_pop(L, 3);
+      lua_pushnil(L);
+
+      char buffer[1024];
+
+      polarssl_strerror(res, buffer, 1024);
+
+      lua_pushfstring(L, "error reading cafile: %s", buffer);
+      return 2;
+    }
+    ssl_set_ca_chain(&ssl->ssl, &ssl->ca_crt, NULL, NULL);
+  }
+
+  lua_pop(L, 1);
+
+  // ----------------------------------------------------------------------- //
+
+  lua_getfield(L, 2, "mode");
+
+  if (lua_isstring(L, -1)) {
+    const char *value = luaL_checkstring(L, -1);
+    if (!strcmp(value, "client")) {
+      mode = SSL_IS_CLIENT;
+    } else if (!strcmp(value, "server")) {
+      mode = SSL_IS_SERVER;
+    } else {
+      lua_pushnil(L);
+      lua_pushstring(L, "invalid mode, must be \"client\" or \"server\"");
+      return 2;
+    }
+  }
+
+  lua_pop(L, 1);
+
+  // ----------------------------------------------------------------------- //
+
+  lua_getfield(L, 2, "minprotocol");
+
+  if (lua_isstring(L, -1)) {
+    const char *value = luaL_checkstring(L, -1);
+    int minor_version;
+    if (!strcmp(value, "sslv3"))        minor_version = SSL_MINOR_VERSION_0;
+    else if (!strcmp(value, "tlsv1"))   minor_version = SSL_MINOR_VERSION_1;
+    else if (!strcmp(value, "tlsv1_1")) minor_version = SSL_MINOR_VERSION_2;
+    else if (!strcmp(value, "tlsv1_2")) minor_version = SSL_MINOR_VERSION_3;
+    else {
+      lua_pop(L, 3);
+      lua_pushnil(L);
+      lua_pushfstring(L, "unsupported protocol value \"%s\"", value);
+      return 2;
+    }
+    ssl_set_min_version(&ssl->ssl, SSL_MAJOR_VERSION_3, minor_version);
+  }
+
+  lua_pop(L, 1);
+
+  // ----------------------------------------------------------------------- //
+
+  lua_getfield(L, 2, "maxprotocol");
+
+  if (lua_isstring(L, -1)) {
+    const char *value = luaL_checkstring(L, -1);
+    int minor_version;
+    if (!strcmp(value, "sslv3"))        minor_version = SSL_MINOR_VERSION_0;
+    else if (!strcmp(value, "tlsv1"))   minor_version = SSL_MINOR_VERSION_1;
+    else if (!strcmp(value, "tlsv1_1")) minor_version = SSL_MINOR_VERSION_2;
+    else if (!strcmp(value, "tlsv1_2")) minor_version = SSL_MINOR_VERSION_3;
+    else {
+      lua_pop(L, 3);
+      lua_pushnil(L);
+      lua_pushfstring(L, "unsupported protocol value \"%s\"", value);
+      return 2;
+    }
+    ssl_set_max_version(&ssl->ssl, SSL_MAJOR_VERSION_3, minor_version);
+  }
+
+  lua_pop(L, 1);
+
+  // ----------------------------------------------------------------------- //
+
+  lua_getfield(L, 2, "ciphersuites");
+
+  if (lua_istable(L, -1)) {
+    const int n = lua_rawlen(L, -1);
+    int i = 0;
+    
+    ssl->ciphersuites = (int *)malloc((n + 1) * (sizeof(int)));
+
+    lua_pushvalue(L, -1);
+    lua_pushnil(L);
+
+    while (lua_next(L, -2)) {
+      lua_pushvalue(L, -2);
+
+      int cipher_id = ssl_get_ciphersuite_id(lua_tostring(L, -2));
+
+      ssl->ciphersuites[i] = cipher_id;
+      i++;
+      
+      lua_pop(L, 2);
+    }
+    
+    ssl->ciphersuites[i] = 0;
+    ssl_set_ciphersuites(&ssl->ssl, ssl->ciphersuites);
+
+    lua_pop(L, 1);
+  }
+
+  lua_pop(L, 1);
+
+  // ----------------------------------------------------------------------- //
+
+  lua_getfield(L, 2, "verifyext");
+
+  if (lua_istable(L, -1)) {
+    lua_pushvalue(L, -1);
+    lua_pushnil(L);
+
+    while (lua_next(L, -2)) {
+      lua_pushvalue(L, -2);
+
+      if (strcmp(lua_tostring(L, -2), "lsec_continue") == 0) {
+        lsec_continue = 1;
+      }
+      
+      lua_pop(L, 2);
+    }
+
+    lua_pop(L, 1);
+  }
+
+  lua_pop(L, 1);
+
+  // ----------------------------------------------------------------------- //
+
+  lua_getfield(L, 2, "verify");
+
+  if (lua_istable(L, -1)) {
+    lua_pushvalue(L, -1);
+    lua_pushnil(L);
+
+    while (lua_next(L, -2)) {
+      lua_pushvalue(L, -2);
+
+      if (strcmp(lua_tostring(L, -2), "peer") == 0) {
+        verify_peer = 1;
+      }
+      
+      lua_pop(L, 2);
+    }
+
+    lua_pop(L, 1);
+  }
+
+  lua_pop(L, 1);
+
+  // ----------------------------------------------------------------------- //
 
   ssl->state = LSEC_STATE_NEW;
   ssl->sock = fd;
@@ -369,7 +462,7 @@ static int meth_create(lua_State *L)
   
   ssl_set_own_cert(&ssl->ssl, &ssl->crt, &ssl->pk);
   ssl_set_endpoint(&ssl->ssl, mode);
-  ssl_set_authmode(&ssl->ssl, SSL_VERIFY_OPTIONAL);
+  ssl_set_authmode(&ssl->ssl, verify_peer ? (lsec_continue ? SSL_VERIFY_OPTIONAL : SSL_VERIFY_REQUIRED) : SSL_VERIFY_NONE);
   ssl_set_bio(&ssl->ssl, net_recv, &ssl->sock, net_send, &ssl->sock);
   // ssl_set_dbg(&ssl->ssl, my_debug, stdout);
 

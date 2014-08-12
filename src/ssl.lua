@@ -1,6 +1,6 @@
 ------------------------------------------------------------------------------
--- LuaSec 0.4.1
--- Copyright (C) 2006-2011 Bruno Silvestre
+-- LuaSec 0.5
+-- Copyright (C) 2006-2014 Bruno Silvestre
 --
 ------------------------------------------------------------------------------
 
@@ -10,7 +10,7 @@ local x509    = require("ssl.x509")
 
 module("ssl", package.seeall)
 
-_VERSION   = "0.5.PR"
+_VERSION   = "0.5"
 _COPYRIGHT = core.copyright()
 
 -- Export
@@ -58,8 +58,12 @@ function newcontext(cfg)
    end
    -- Load the certificate
    if cfg.certificate then
-      succ, msg = context.loadcert(ctx, cfg.certificate)
-      if not succ then return nil, msg end
+     succ, msg = context.loadcert(ctx, cfg.certificate)
+     if not succ then return nil, msg end
+     if cfg.key and context.checkkey then
+       succ = context.checkkey(ctx)
+       if not succ then return nil, "private key does not match public key" end
+     end
    end
    -- Load the CA certificates
    if cfg.cafile or cfg.capath then
@@ -82,6 +86,11 @@ function newcontext(cfg)
       succ, msg = context.setdepth(ctx, cfg.depth)
       if not succ then return nil, msg end
    end
+
+   -- NOTE: Setting DH parameters and elliptic curves needs to come after
+   -- setoptions(), in case the user has specified the single_{dh,ecdh}_use
+   -- options.
+
    -- Set DH parameters
    if cfg.dhparam then
       if type(cfg.dhparam) ~= "function" then

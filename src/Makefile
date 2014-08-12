@@ -20,12 +20,11 @@ MAC_ENV=env MACOSX_DEPLOYMENT_TARGET='$(MACVER)'
 MAC_CFLAGS=-O2 -fno-common $(WARN) $(INCDIR) $(DEFS)
 MAC_LDFLAGS=-bundle -undefined dynamic_lookup $(LIBDIR)
 
-INSTALL	?= install
-CC	?= cc
-LD	?= $(MYENV) cc
-CFLAGS	+= $(MYCFLAGS)
-LDFLAGS	+= $(MYLDFLAGS)
-DESTDIR	?= /
+INSTALL  = install
+CC       = cc
+LD       = $(MYENV) cc
+CFLAGS  += $(MYCFLAGS)
+LDFLAGS += $(MYLDFLAGS)
 
 .PHONY: all clean install none linux bsd macosx luasocket
 

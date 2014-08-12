@@ -1,12 +1,12 @@
 # Inform the location to intall the modules
-LUAPATH		?= /usr/share/lua/5.1
-LUACPATH	?= /usr/lib/lua/5.1
+LUAPATH  ?= /usr/share/lua/5.1
+LUACPATH ?= /usr/lib/lua/5.1
 
 # Compile with build-in LuaSocket's help files.
 # Comment this lines if you will link with non-internal LuaSocket's help files
 #  and edit INCDIR and LIBDIR properly.
-EXTRA		 = luasocket
-DEFS		 = -DWITH_LUASOCKET
+EXTRA = luasocket
+DEFS  = -DWITH_LUASOCKET
 
 # Edit the lines below to inform new path, if necessary.
 # Path below points to internal LuaSocket's help files.

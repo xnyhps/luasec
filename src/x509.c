@@ -385,6 +385,138 @@ static int meth_modulus(lua_State* L)
   return 0;
 }
 
+static int meth_jwk(lua_State *L)
+{
+  X509* cert = lsec_checkx509(L, 1);
+  EVP_PKEY *pktmp;
+  pktmp = X509_get_pubkey(cert);
+
+  if (EVP_PKEY_base_id(pktmp) == EVP_PKEY_RSA) {
+    BIO *b64bio, *mbio, *bio;
+    int i;
+    unsigned int bytes;
+    unsigned char buffer[EVP_MAX_MD_SIZE];
+
+    if (!X509_digest(cert, EVP_sha1(), buffer, &bytes)) {
+      lua_pushnil(L);
+      lua_pushstring(L, "error processing the certificate");
+
+      EVP_PKEY_free(pktmp);
+
+      return 2;
+    }
+
+    lua_newtable(L);
+
+    // kty
+
+    lua_pushstring(L, "kty");
+    lua_pushstring(L, "RSA");
+    lua_settable(L, -3);
+
+    // n
+
+    mbio = BIO_new(BIO_s_mem());
+    b64bio = BIO_new(BIO_f_base64());
+    bio = BIO_push(b64bio, mbio);
+
+    BIO_set_flags(b64bio, BIO_FLAGS_BASE64_NO_NL);
+
+    unsigned char *n = (unsigned char *)malloc(BN_num_bytes(pktmp->pkey.rsa->n));
+    int len_n = BN_bn2bin(pktmp->pkey.rsa->n, n);
+
+    BIO_write(bio, n, len_n);
+
+    BIO_flush(bio);
+
+    char *base64_n;
+    int base64_len_n = (int)BIO_ctrl(mbio, BIO_CTRL_INFO, 0, (char *)&base64_n);
+
+    for (i = 0; i < base64_len_n; i++) {
+      if (base64_n[i] == '+') base64_n[i] = '-';
+      else if (base64_n[i] == '/') base64_n[i] = '_';
+      else if (base64_n[i] == '=') base64_len_n = i;
+    }
+
+    lua_pushstring(L, "n");
+    lua_pushlstring(L, base64_n, base64_len_n);
+    lua_settable(L, -3);
+
+    free(n);
+    BIO_free_all(bio);
+
+    // e
+
+    mbio = BIO_new(BIO_s_mem());
+    b64bio = BIO_new(BIO_f_base64());
+    bio = BIO_push(b64bio, mbio);
+
+    BIO_set_flags(b64bio, BIO_FLAGS_BASE64_NO_NL);
+
+    unsigned char *e = (unsigned char *)malloc(BN_num_bytes(pktmp->pkey.rsa->e));
+    int len_e = BN_bn2bin(pktmp->pkey.rsa->e, e);
+
+    BIO_write(bio, e, len_e);
+
+    BIO_flush(bio);
+
+    char *base64_e;
+    int base64_len_e = (int)BIO_ctrl(mbio, BIO_CTRL_INFO, 0, (char *)&base64_e);
+
+    for (i = 0; i < base64_len_e; i++) {
+      if (base64_e[i] == '+') base64_e[i] = '-';
+      else if (base64_e[i] == '/') base64_e[i] = '_';
+      else if (base64_e[i] == '=') base64_len_e = i;
+    }
+
+    lua_pushstring(L, "e");
+    lua_pushlstring(L, base64_e, base64_len_e);
+    lua_settable(L, -3);
+
+    free(e);
+    BIO_free_all(bio);
+
+    // x5t
+
+    mbio = BIO_new(BIO_s_mem());
+    b64bio = BIO_new(BIO_f_base64());
+    bio = BIO_push(b64bio, mbio);
+
+    BIO_set_flags(b64bio, BIO_FLAGS_BASE64_NO_NL);
+
+    BIO_write(bio, buffer, bytes);
+
+    BIO_flush(bio);
+
+    char *base64_x5t;
+    int base64_len_x5t = (int)BIO_ctrl(mbio, BIO_CTRL_INFO, 0, (char *)&base64_x5t);
+
+    for (i = 0; i < base64_len_x5t; i++) {
+      if (base64_x5t[i] == '+') base64_x5t[i] = '-';
+      else if (base64_x5t[i] == '/') base64_x5t[i] = '_';
+      else if (base64_x5t[i] == '=') base64_len_x5t = i;
+    }
+
+    lua_pushstring(L, "x5t");
+    lua_pushlstring(L, base64_x5t, base64_len_x5t);
+    lua_settable(L, -3);
+
+    EVP_PKEY_free(pktmp);
+    BIO_free_all(bio);
+
+    return 1;
+  } else {
+    lua_pushnil(L);
+    lua_pushfstring(L, "unknown key format: %x", EVP_PKEY_base_id(pktmp));
+
+    EVP_PKEY_free(pktmp);
+
+    return 2;
+  }
+
+  return 0;
+}
+
 /**
  * Check if the certificate is valid in a given time.
  */
@@ -582,6 +714,7 @@ static luaL_Reg methods[] = {
   {"signature_alg", meth_signature_alg},
   {"modulus",    meth_modulus},
   {"spki",       meth_spki},
+  {"jwk",        meth_jwk},
   {NULL,         NULL}
 };
 

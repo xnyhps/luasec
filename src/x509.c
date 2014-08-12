@@ -328,6 +328,7 @@ static int meth_der(lua_State *L)
     lua_pushnil(L);
   BIO_free(bio);
   return 1;
+}
 
 /**
  * Extract public key in PEM format.
@@ -630,8 +631,8 @@ static int meth_notafter(lua_State *L)
 
 static int meth_crl(lua_State *L)
 {
-  X509* peer = lsec_checkx509(L, 1);
-  STACK_OF(DIST_POINT) *dps = X509_get_ext_d2i(peer, NID_crl_distribution_points, NULL, NULL);
+  p_x509 px  = lsec_checkp_x509(L, 1);
+  STACK_OF(DIST_POINT) *dps = X509_get_ext_d2i(px->cert, NID_crl_distribution_points, NULL, NULL);
   DIST_POINT *dp;
   STACK_OF(GENERAL_NAME) *names;
   GENERAL_NAME *name;
@@ -651,7 +652,7 @@ static int meth_crl(lua_State *L)
 
   name = sk_GENERAL_NAME_pop(names);
   if (name->type == GEN_URI) {
-      push_asn1_string(L, name->d.uniformResourceIdentifier);
+      push_asn1_string(L, name->d.uniformResourceIdentifier, px->encode);
       return 1;
   } else {
       lua_pushnil(L);
@@ -661,11 +662,11 @@ static int meth_crl(lua_State *L)
 
 static int meth_ocsp(lua_State *L)
 {
-  X509* peer = lsec_checkx509(L, 1);
+  p_x509 px  = lsec_checkp_x509(L, 1);
   AUTHORITY_INFO_ACCESS *info;
   int i, count = 0;
 
-  info = X509_get_ext_d2i(peer, NID_info_access, NULL, NULL);
+  info = X509_get_ext_d2i(px->cert, NID_info_access, NULL, NULL);
 
   if (info == NULL) {
     lua_pushnil(L);
@@ -677,7 +678,7 @@ static int meth_ocsp(lua_State *L)
 
     if (OBJ_obj2nid(ad->method) == NID_ad_OCSP) {
       if (ad->location->type == GEN_URI) {
-        push_asn1_string(L, ad->location->d.uniformResourceIdentifier);
+        push_asn1_string(L, ad->location->d.uniformResourceIdentifier, px->encode);
         count++;
       }
     }

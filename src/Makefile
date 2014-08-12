@@ -17,14 +17,15 @@ LNX_CFLAGS=-O2 -fPIC $(WARN) $(INCDIR) $(DEFS)
 LNX_LDFLAGS=-O -fPIC -shared $(LIBDIR)
 
 MAC_ENV=env MACOSX_DEPLOYMENT_TARGET='$(MACVER)'
-MAC_CFLAGS=-O2 -fno-common $(WARN) $(INCDIR) $(DEFS)
-MAC_LDFLAGS=-bundle -undefined dynamic_lookup $(LIBDIR)
+MAC_CFLAGS=-g -O0 -fno-common $(WARN) $(INCDIR) $(DEFS)
+MAC_LDFLAGS=-bundle $(LIBDIR) -undefined dynamic_lookup -macosx_version_min '$(MACVER)'
 
-INSTALL  = install
-CC       = cc
-LD       = $(MYENV) cc
-CFLAGS  += $(MYCFLAGS)
-LDFLAGS += $(MYLDFLAGS)
+INSTALL	?= install
+CC	?= clang
+LD	?= $(MYENV) ld
+CFLAGS	+= $(MYCFLAGS)
+LDFLAGS	+= $(MYLDFLAGS)
+DESTDIR	?= /
 
 .PHONY: all clean install none linux bsd macosx luasocket
 
@@ -32,9 +33,9 @@ all:
 
 install: $(CMOD) $(LMOD)
 	$(INSTALL) -d $(DESTDIR)$(LUAPATH)/ssl $(DESTDIR)$(LUACPATH)
-	$(INSTALL) -c $(CMOD) $(DESTDIR)$(LUACPATH)
-	$(INSTALL) -m644 -c $(LMOD) $(DESTDIR)$(LUAPATH)
-	$(INSTALL) -m644 -c https.lua $(DESTDIR)$(LUAPATH)/ssl
+	$(INSTALL) $(CMOD) $(DESTDIR)$(LUACPATH)
+	$(INSTALL) -m644 $(LMOD) $(DESTDIR)$(LUAPATH)
+	$(INSTALL) -m644 https.lua $(DESTDIR)$(LUAPATH)/ssl
 
 linux:
 	@$(MAKE) $(CMOD) MYCFLAGS="$(LNX_CFLAGS)" MYLDFLAGS="$(LNX_LDFLAGS)" EXTRA="$(EXTRA)"

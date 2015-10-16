@@ -686,6 +686,7 @@ static int meth_info(lua_State *L)
       EVP_PKEY_free(key);
       return 6;
     }
+  }
 
   EVP_PKEY_free(key);
 #endif

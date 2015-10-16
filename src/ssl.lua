@@ -147,7 +147,7 @@ local function info(ssl, field)
     return comp
   end
   local info = {compression = comp}
-  str, info.bits, info.algbits, protocol = core.info(ssl)
+  str, info.bits, info.algbits, protocol, info.tempalg, temp_info = core.info(ssl)
   if str then
     info.cipher, info.protocol, info.key,
     info.authentication, info.encryption, info.mac =
@@ -157,6 +157,11 @@ local function info(ssl, field)
   end
   if protocol then
     info.protocol = protocol
+  end
+  if info.tempalg == "ECDH" then
+    info.curve = temp_info
+  elseif info.tempalg == "RSA" or info.tempalg == "DH" then
+    info.tempbits = temp_info
   end
   if field then
     return info[field]

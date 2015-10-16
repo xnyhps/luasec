@@ -658,7 +658,7 @@ static int meth_info(lua_State *L)
   lua_pushstring(L, SSL_get_version(ssl->ssl));
 
 #ifdef SSL_get_server_tmp_key
-  if (!SSL_get_server_tmp_key(s, &key)) {
+  if (!SSL_get_server_tmp_key(ssl->ssl, &key)) {
     return 4;
   }
 

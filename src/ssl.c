@@ -669,22 +669,49 @@ static int meth_info(lua_State *L)
       EVP_PKEY_free(key);
       return 6;
     case EVP_PKEY_DH:
+    {
+      DH *dh = EVP_PKEY_get1_DH(key);
+      unsigned char *data;
+      int len = BN_num_bytes(dh->p);
+
+      data = (unsigned char*)malloc(len);
+
+      BN_bn2bin(dh->p, data);
+
       lua_pushstring(L, "DH");
       lua_pushnumber(L, EVP_PKEY_bits(key));
+      lua_pushlstring(L, data, len);
+
+      len = BN_num_bytes(dh->g);
+
+      free(data);
+
+      data = (unsigned char*)malloc(len);
+
+      BN_bn2bin(dh->g, data);
+
+      lua_pushlstring(L, data, len);
+
       EVP_PKEY_free(key);
-      return 6;
+      free(data);
+
+      return 8;
+    }
     case EVP_PKEY_EC:
     {
       EC_KEY *ec = EVP_PKEY_get1_EC_KEY(key);
+      EC_GROUP *group = EC_KEY_get0_group(ec);
       int nid;
       const char *cname;
-      nid = EC_GROUP_get_curve_name(EC_KEY_get0_group(ec));
+      nid = EC_GROUP_get_curve_name(group);
       EC_KEY_free(ec);
       cname = OBJ_nid2sn(nid);
       lua_pushstring(L, "ECDH");
+      lua_pushnumber(L, EC_GROUP_get_degree(group));
       lua_pushstring(L, cname);
       EVP_PKEY_free(key);
-      return 6;
+
+      return 7;
     }
   }
 

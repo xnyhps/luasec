@@ -645,6 +645,7 @@ static int meth_info(lua_State *L)
   int algbits = 0;
   char buf[256] = {0};
   const SSL_CIPHER *cipher;
+  EVP_PKEY *key;
   p_ssl ssl = (p_ssl)luaL_checkudata(L, 1, "SSL:Connection");
   cipher = SSL_get_current_cipher(ssl->ssl);
   if (!cipher)
@@ -655,6 +656,39 @@ static int meth_info(lua_State *L)
   lua_pushnumber(L, bits);
   lua_pushnumber(L, algbits);
   lua_pushstring(L, SSL_get_version(ssl->ssl));
+
+#ifdef SSL_get_server_tmp_key
+  if (!SSL_get_server_tmp_key(s, &key)) {
+    return 4;
+  }
+
+  switch (EVP_PKEY_id(key)) {
+    case EVP_PKEY_RSA:
+      lua_pushstring(L, "RSA");
+      lua_pushnumber(L, EVP_PKEY_bits(key));
+      EVP_PKEY_free(key);
+      return 6;
+    case EVP_PKEY_DH:
+      lua_pushstring(L, "DH");
+      lua_pushnumber(L, EVP_PKEY_bits(key));
+      EVP_PKEY_free(key);
+      return 6;
+    case EVP_PKEY_EC:
+    {
+      EC_KEY *ec = EVP_PKEY_get1_EC_KEY(key);
+      int nid;
+      const char *cname;
+      nid = EC_GROUP_get_curve_name(EC_KEY_get0_group(ec));
+      EC_KEY_free(ec);
+      cname = OBJ_nid2sn(nid);
+      lua_pushstring(L, "ECDH");
+      lua_pushstring(L, cname);
+      EVP_PKEY_free(key);
+      return 6;
+    }
+
+  EVP_PKEY_free(key);
+#endif
   return 4;
 }
 
@@ -804,7 +838,7 @@ static luaL_Reg methods[] = {
   {"sni",                 meth_sni},
   {"want",                meth_want},
   {"ciphers",             meth_ciphers},
-  {"did_issue",    meth_did_issue},
+  {"did_issue",           meth_did_issue},
   {NULL,                  NULL}
 };
 
